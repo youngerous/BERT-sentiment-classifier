@@ -1,5 +1,6 @@
 import multiprocessing
 from argparse import ArgumentParser, Namespace
+from typing import Tuple
 
 import nlp
 import pytorch_lightning as pl
@@ -9,7 +10,7 @@ from pytorch_lightning.loggers import TensorBoardLogger
 
 
 class IMDBSentimentClassifier(pl.LightningModule):
-    def __init__(self, args):
+    def __init__(self, args: Namespace) -> None:
         super(IMDBSentimentClassifier, self).__init__()
         self.lr = args.lr
         self.momentum = args.momentum
@@ -26,10 +27,10 @@ class IMDBSentimentClassifier(pl.LightningModule):
         self.debug = True if args.debug else False
         self.save_hyperparameters()
 
-    def prepare_data(self):
+    def prepare_data(self) -> None:
         tokenizer = transformers.BertTokenizer.from_pretrained(self.pretrain)
 
-        def _prepare_ds(split):
+        def _prepare_ds(split: str) -> torch.utils.data.Dataset:
             dset = nlp.load_dataset(
                 "imdb", split=f"{split}[:{self.batch_size if self.debug else '5%' }]"
             )
@@ -41,15 +42,15 @@ class IMDBSentimentClassifier(pl.LightningModule):
                 when using tokenizer.map() function.
                 """
 
-                def __init__(self, seq_length):
+                def __init__(self, seq_length: int) -> None:
                     super(TokenizedDataset, self).__init__()
                     self.dset = dset
                     self.max_length = seq_length
 
-                def __len__(self):
+                def __len__(self) -> int:
                     return len(self.dset)
 
-                def _tokenize(self, x):
+                def _tokenize(self, x: dict) -> dict:
                     x["label"] = torch.tensor(x["label"])
                     x["input_ids"] = torch.tensor(
                         tokenizer.encode(
@@ -61,7 +62,7 @@ class IMDBSentimentClassifier(pl.LightningModule):
                     )
                     return x
 
-                def __getitem__(self, idx):
+                def __getitem__(self, idx: int) -> dict:
                     return self._tokenize(self.dset[idx])
 
             return TokenizedDataset(self.seq_length)
@@ -98,21 +99,21 @@ class IMDBSentimentClassifier(pl.LightningModule):
         out = {"val_loss": loss, "val_acc": acc}
         return {**out, "log": out}
 
-    def train_dataloader(self):
+    def train_dataloader(self) -> torch.utils.data.DataLoader:
         return torch.utils.data.DataLoader(
             self.train_ds, batch_size=self.batch_size, drop_last=True, shuffle=True
         )
 
-    def val_dataloader(self):
+    def val_dataloader(self) -> torch.utils.data.DataLoader:
         return torch.utils.data.DataLoader(
             self.test_ds, batch_size=self.batch_size, drop_last=False, shuffle=False
         )
 
-    def configure_optimizers(self):
+    def configure_optimizers(self) -> torch.optim:
         return torch.optim.SGD(self.parameters(), lr=self.lr, momentum=self.momentum)
 
     @staticmethod
-    def add_model_specific_args(parent_parser):
+    def add_model_specific_args(parent_parser) -> ArgumentParser:
         parser = ArgumentParser(parents=[parent_parser])
         parser.add_argument("--epoch", default=10, type=int)
         parser.add_argument(
@@ -129,14 +130,14 @@ class IMDBSentimentClassifier(pl.LightningModule):
             default=8,
             type=int,
             metavar="N",
-            help="mini-batch size (default: 64), this is the total "
+            help="mini-batch size (default: 8), this is the total "
             "batch size of all GPUs on the current node when "
             "using Data Parallel or Distributed Data Parallel",
         )
         parser.add_argument(
             "--lr",
             "--learning-rate",
-            default=0.01,
+            default=0.001,
             type=float,
             metavar="LR",
             help="initial learning rate",
@@ -172,7 +173,7 @@ def main(args: Namespace) -> None:
         trainer.fit(model)
 
 
-def run_cli():
+def run_cli() -> None:
     parent_parser = ArgumentParser(
         add_help=False
     )  # MUST add_help=False in order to conflict among child parsers
